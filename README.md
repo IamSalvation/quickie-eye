@@ -1,4 +1,4 @@
-﻿# QuickieEye (old_eye)
+﻿# QuickieEye
 
 A Progressive Web App (PWA) for [describe your app here].
 

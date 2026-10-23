@@ -10,7 +10,7 @@ Thumbs.db
 # Logs
 *.log
 
-# Node (in case you add a build step later)
+# Node
 node_modules/
 
 # Temporary files
