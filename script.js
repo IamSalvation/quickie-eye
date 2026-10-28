@@ -1,5 +1,5 @@
 /* ============================================================
-   QUICKIE EYE — APP LOGIC (v6 — iOS PWA download fix)
+   QUICKIE EYE — APP LOGIC (v7 — 60s & 10-Video Limits)
    ============================================================ */
 
 import * as Mediabunny from "./mediabunny.min.mjs";
@@ -492,8 +492,6 @@ function getFilteredVideos() {
 // DOWNLOAD BLOB — iOS PWA aware
 // ------------------------------------------------------------
 async function downloadBlob(blob, filename) {
-  // iOS standalone PWA: `<a download>` is silently blocked by iOS.
-  // Route through the Web Share API instead.
   if (IS_IOS_STANDALONE && navigator.canShare) {
     try {
       const file = new File([blob], filename, {
@@ -505,11 +503,9 @@ async function downloadBlob(blob, filename) {
       }
     } catch (e) {
       if (e.name === "AbortError") return true;
-      // fall through
     }
   }
 
-  // Standard path
   try {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1895,13 +1891,24 @@ function stopRecording() {
 function startTimer() {
   recordingStartTime = Date.now();
   timerEl.textContent = "00:00";
+
   timerInterval = setInterval(() => {
     const s = Math.floor((Date.now() - recordingStartTime) / 1000);
+
+    // 🚨 STOP AT 60 SECONDS 🚨
+    if (s >= 60) {
+      stopRecording();
+      showToast("60-second limit reached. Recording saved.", "success");
+      return;
+    }
+
     timerEl.textContent =
-      String(Math.floor(s / 60)).padStart(2, "0") + ":" +
+      String(Math.floor(s / 60)).padStart(2, "0") +
+      ":" +
       String(s % 60).padStart(2, "0");
   }, 250);
 }
+
 function stopTimer() {
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = null;
@@ -2002,13 +2009,41 @@ retakeBtn.addEventListener("click", () => {
 saveBtn.addEventListener("click", async () => {
   if (!recordedBlob) { showToast("Nothing to save", "error"); return; }
 
+  // 🚨 CHECK IF 10 VIDEOS EXIST 🚨
+  const existing = await getAllVideos();
+  if (existing.length >= 10) {
+    openModal(`
+      <div class="modal-handle"></div>
+      <div class="modal-title">Storage Full</div>
+      <p style="text-align:center; color:var(--qe-muted); margin-bottom: 20px;">
+        You have reached the 10-video limit. To create more videos, please delete an older video from your Home screen.
+      </p>
+      <div class="modal-actions">
+        <button class="primary" id="goToHomeBtn">Go to Home</button>
+        <button class="ghost" onclick="closeModal()">Cancel</button>
+      </div>
+    `);
+
+    // Add listener to the "Go to Home" button
+    setTimeout(() => {
+      document.getElementById("goToHomeBtn")?.addEventListener("click", () => {
+        closeModal();
+        previewVideo.src = "";
+        stopCamera();
+        showScreen(homeScreen);
+        renderHome();
+      });
+    }, 100);
+
+    return; // Stop the save process
+  }
+
   const folderId = previewFolderSelect?.value && previewFolderSelect.value !== "__new__"
     ? previewFolderSelect.value
     : null;
 
   try {
     const duration = await getBlobDuration(recordedBlob);
-    const existing = await getAllVideos();
     const title = "Video " + (existing.length + 1);
     const videoId = "v_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
 
